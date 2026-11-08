@@ -1,0 +1,32 @@
+header:
+  version: 14
+
+machine: skomer
+distro: poky
+target: skomer-image-minimal
+
+repos:
+  poky:
+    url: https://git.yoctoproject.org/poky
+    branch: scarthgap
+    layers:
+      meta:
+      meta-poky:
+
+  meta-openembedded:
+    url: https://git.openembedded.org/meta-openembedded
+    branch: scarthgap
+    layers:
+      meta-oe:
+
+  meta-skomer:
+    path: ..
+
+local_conf_header:
+  skomer: |
+    PACKAGE_CLASSES = "package_ipk"
+    INIT_MANAGER = "systemd"
+    EXTRA_IMAGE_FEATURES = "debug-tweaks"
+    IMAGE_FSTYPES = "wic ext4 tar.gz"
+    DL_DIR = "${TOPDIR}/../downloads"
+    SSTATE_DIR = "${TOPDIR}/../sstate-cache"

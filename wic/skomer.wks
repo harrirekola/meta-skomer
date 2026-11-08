@@ -1,0 +1,7 @@
+# short-description: SD card image for Samsung Galaxy Xcover 2 (skomer)
+# long-description: FAT boot partition (zImage, DTB, boot.scr) plus an ext4
+# rootfs. The phone's eMMC is permanently write-protected; this image is
+# booted from SD by the stock U-Boot. The phone's SD is /dev/mmcblk0 and
+# U-Boot sees it as mmc 1.
+part boot --source bootimg-partition --ondisk mmcblk --fstype=vfat --label boot --active --align 4096 --size 512M
+part root --source rootfs --ondisk mmcblk --fstype=ext4 --label root --align 4096

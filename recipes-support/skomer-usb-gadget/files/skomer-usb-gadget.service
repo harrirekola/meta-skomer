@@ -1,0 +1,15 @@
+[Unit]
+Description=Skomer USB RNDIS gadget
+Documentation=https://wiki.postmarketos.org/wiki/Samsung_Galaxy_Xcover_2_(samsung-skomer)
+After=systemd-modules-load.service
+Wants=network-pre.target
+Before=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/skomer-usb-gadget
+ExecStop=-/bin/sh -c 'ip link set usb0 down'
+
+[Install]
+WantedBy=multi-user.target
