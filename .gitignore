@@ -1,2 +1,23 @@
 __pycache__/
 *.pyc
+
+# Build output (in case kas/bitbake is run inside the layer)
+build/
+tmp/
+downloads/
+sstate-cache/
+cache/
+
+# Generated images and binaries
+*.wic
+*.wic.*
+*.img
+*.dtb
+*.ext4
+*.tar.gz
+*.tgz
+*.scr
+*.ko
+*.bin
+*.txt
+*.hcd
