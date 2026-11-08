@@ -14,9 +14,13 @@ RDEPENDS:${PN} = " \
     dtc \
     kernel-modules \
     skomer-usb-gadget \
+    skomer-firmware \
+    iw \
+    wpa-supplicant \
+    wireless-regdb-static \
 "
 
 # Optional, add these to the image when you start working on the
 # corresponding hardware:
-#   iw wpa-supplicant bluez5 alsa-utils linux-firmware
+#   bluez5 alsa-utils
 #   weston weston-init

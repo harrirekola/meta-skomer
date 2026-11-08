@@ -59,6 +59,7 @@ The SD card is `/dev/mmcblk0` in Linux and `mmc 1` in U-Boot.
 | `recipes-core/images/skomer-image-minimal.bb` | Minimal console/SSH image |
 | `recipes-core/packagegroups/packagegroup-skomer.bb` | Bring-up tooling |
 | `recipes-support/skomer-usb-gadget/` | RNDIS USB networking at `172.16.42.1/24` |
+| `recipes-support/skomer-firmware/` | Broadcom BCM4334 WiFi firmware and board NVRAM |
 | `scripts/verify-bootimg.sh` | Inspect `skomer-boot.img` with `unpack_bootimg` |
 
 ## Requirements
@@ -263,6 +264,49 @@ systemctl restart skomer-usb-gadget
 lsmod | grep g_ether
 ```
 
+## WiFi
+
+The image includes the BCM4334 firmware/NVRAM
+(`recipes-support/skomer-firmware/`) plus `iw`, `wpa-supplicant` and
+`wireless-regdb-static`.
+
+Check that the SDIO card and driver came up:
+
+```sh
+dmesg | grep -iE 'mmc1|brcmfmac|firmware'
+ip -brief link
+```
+
+Connect manually:
+
+```sh
+wpa_passphrase 'YourSSID' 'YourPassword' >> /etc/wpa_supplicant.conf
+wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf -D nl80211
+wpa_cli -i wlan0 status
+udhcpc -i wlan0
+ping -c 3 1.1.1.1
+```
+
+`wpa_state=COMPLETED` means association succeeded. `wpa_supplicant` handles
+the wireless link; `udhcpc` obtains the IP address, route and DNS.
+
+For boot-time persistence, create
+`/etc/wpa_supplicant/wpa_supplicant-wlan0.conf` with the same
+`ctrl_interface` and `network` settings and enable
+`wpa_supplicant@wlan0.service`. Add DHCP through `systemd-networkd` or a small
+`udhcpc` unit.
+
+The NVRAM template MAC is randomized by `brcmfmac`; provision a fixed address
+if you need a stable one. The firmware/NVRAM are proprietary
+(`LICENSE = "CLOSED"`); do not publish them without checking redistribution
+rights.
+
+If `wlan0` does not appear, check `dmesg | grep -i brcmfmac` and confirm both
+firmware files are present in `/lib/firmware/brcm/`. `wpa_cli` needs
+`-i wlan0`; without it you will see `(nil)`. If you replace
+`/etc/wpa_supplicant.conf` with `wpa_passphrase` output, keep
+`ctrl_interface=/var/run/wpa_supplicant` or `wpa_cli` cannot connect.
+
 ## Configuration
 
 Machine variables in `conf/machine/skomer.conf`:
@@ -285,56 +329,22 @@ mount eMMC partitions read-write.
 
 ## Development notes
 
-### Rebuilding
-
-After kernel, DTB, or machine changes:
+Rebuild after kernel, DTB, or machine changes:
 
 ```sh
-bitbake skomer-image-minimal   # kernel, rootfs, .wic, boot.scr
-bitbake skomer-bootimg         # skomer-boot.img (kernel + DTB + ramdisk)
+bitbake skomer-image-minimal
+bitbake skomer-bootimg
 ```
 
-If only the kernel or DTB changed, rebuild both the image (for the SD boot
-partition) and the boot image (for `fastboot boot`).
-
-### Kernel
-
-`linux-skomer_7.2.bb` uses mainline `linux-7.2.tar.xz` from kernel.org. The
-config in `recipes-kernel/linux/files/defconfig` is derived from the
-postmarketOS `linux-postmarketos-stericsson` 7.2 configuration, with GCC
-adjustments and without debug info or module compression.
-
-To change the config, edit `defconfig` and rebuild. Kernel modules are installed
-in the rootfs and included via `kernel-modules`.
-
-### Boot image and the U-Boot ramdisk quirk
-
-The stock U-Boot 2023.04 handles `fastboot boot` by calling `bootm` on the
-downloaded image. For v0 Android images, `android_image_get_ramdisk()` returns
-an error when `ramdisk_size == 0`; `bootm` then fails and `fastboot_boot()`
-calls `do_reset()`, so the phone reboots instead of booting.
-
-`skomer-mkbootimg.py` therefore always embeds a minimal valid `cpio.gz`
-containing only the archive trailer and no `/init`. U-Boot accepts the image;
-Linux finds no `/init`, falls back to `prepare_namespace()`, and mounts
-`root=/dev/mmcblk0p2` normally.
-
-If you replace the placeholder with a real initramfs, make sure the
-`/init` script mounts the real root and `switch_root`s to it, or the kernel
-will not reach the SD rootfs.
-
-### Device tree
-
-The boot image and the FAT boot partition use `skomer-noemmc.dtb`, produced by
-patching the kernel DTB with `fdtput` to set the eMMC controller to
-`disabled`. This keeps the read-only eMMC out of Linux's way.
-
-### Adding software
-
-Add packages to `skomer-image-minimal.bb` or
-`packagegroup-skomer.bb`, then rebuild and reflash the `.wic`. The minimal image
-does not ship a package manager, so installing packages at runtime is not
-available by default.
+- **Kernel:** `linux-skomer_7.2.bb` uses mainline 7.2. Edit
+  `recipes-kernel/linux/files/defconfig` to change the configuration.
+- **Boot image:** `skomer-mkbootimg.py` embeds a minimal `cpio.gz` because the
+  stock U-Boot rejects v0 images with `ramdisk_size == 0`. A real initramfs
+  must mount the real root and `switch_root` to it.
+- **Device tree:** `skomer-noemmc.dtb` is the kernel DTB with the eMMC node
+  disabled via `fdtput`.
+- **Adding software:** add packages to `packagegroup-skomer.bb` or
+  `skomer-image-minimal.bb`; the image does not ship a package manager.
 
 ## Verify an image
 
@@ -374,37 +384,33 @@ This layer is a bring-up base, not a daily-driver phone OS. Missing pieces
 include:
 
 - modem/RIL, calls, SMS
-- WiFi/BT firmware and `wpa_supplicant`/BlueZ integration
+- Bluetooth firmware and BlueZ integration
+- automatic WiFi provisioning (NetworkManager/systemd-networkd)
 - audio (AB8500 codec)
 - GPU/Mali and a Weston/Wayland stack
 - sensors
 - charging and suspend tuning
 - a package manager or OTA update mechanism
 
-The console and USB networking work; add the relevant packages and config as
-you bring up each subsystem.
+The console, USB networking, and manual WiFi work; add the relevant packages
+and config as you bring up each subsystem. See [WiFi](#wifi) for the current
+WiFi workflow.
 
 ## Troubleshooting
 
-- **Phone resets immediately after `fastboot boot`:** the boot image has
-  `ramdisk_size == 0`. Use the current `skomer-mkbootimg.py`, which embeds the
-  placeholder ramdisk, and rebuild `skomer-bootimg`.
-- **Phone shows the penguins, then panics with
-  `VFS: Unable to mount root fs on unknown-block(179,2)`:** the SD card's
-  second partition is missing or not a valid ext4 filesystem. Rewrite the
-  `.wic`, check `blkid`/`e2fsck -fn`, and use a card of the same or larger size.
-  Add `console=tty0` to the command line to see the error on the display.
-- **`fdtput` fails:** the eMMC node path changed in the DTB. Set
-  `SKOMER_EMMC_NODE` accordingly.
+- **Phone resets after `fastboot boot`:** `ramdisk_size == 0`; use the current
+  `skomer-mkbootimg.py` and rebuild `skomer-bootimg`.
+- **`VFS: Unable to mount root fs ...`:** the SD rootfs is missing or invalid.
+  Rewrite the `.wic`, check `blkid`/`e2fsck -fn`, and add `console=tty0` to see
+  the error on the display.
+- **`fdtput` fails:** the eMMC node path changed; set `SKOMER_EMMC_NODE`.
 - **`zImage`/DTB missing from the boot partition:** check `IMAGE_BOOT_FILES`
-  and the deploy directory; rebuild `skomer-image-minimal`.
-- **`boot.scr` is not executed:** the stock U-Boot does not scan SD cards. Load
-  and `source` it manually, or use fastboot.
-- **No USB network interface:** check `lsusb` for the RNDIS gadget, check the
-  host interface name with `ip -brief link`, and restart
+  and rebuild `skomer-image-minimal`.
+- **`boot.scr` is not executed:** stock U-Boot does not scan SD cards; load and
+  `source` it manually, or use fastboot.
+- **No USB network interface:** check `lsusb` and `ip -brief link`, then restart
   `skomer-usb-gadget` on the phone.
-- **Root login fails:** `debug-tweaks` must be enabled for the empty password.
-  Check `EXTRA_IMAGE_FEATURES` in `local.conf` and rebuild.
+- **Root login fails:** `debug-tweaks` must be enabled.
 
 ## Provenance
 
