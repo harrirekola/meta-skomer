@@ -18,9 +18,10 @@ RDEPENDS:${PN} = " \
     iw \
     wpa-supplicant \
     wireless-regdb-static \
+    bluez5 \
 "
 
 # Optional, add these to the image when you start working on the
 # corresponding hardware:
-#   bluez5 alsa-utils
+#   alsa-utils
 #   weston weston-init

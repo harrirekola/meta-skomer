@@ -11,6 +11,7 @@ UNPACKDIR = "${WORKDIR}"
 SRC_URI = " \
     file://brcmfmac4334-sdio.samsung,skomer.bin \
     file://brcmfmac4334-sdio.samsung,skomer.txt \
+    file://BCM4334B0.hcd \
 "
 
 do_install() {
@@ -18,6 +19,7 @@ do_install() {
     install -m 0644 \
         ${UNPACKDIR}/brcmfmac4334-sdio.samsung,skomer.bin \
         ${UNPACKDIR}/brcmfmac4334-sdio.samsung,skomer.txt \
+        ${UNPACKDIR}/BCM4334B0.hcd \
         ${D}${nonarch_base_libdir}/firmware/brcm/
 }
 
